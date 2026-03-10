@@ -70,18 +70,19 @@ async def run_pipeline(config: Config) -> None:
         if _tts.load():
             tts_engine = _tts
 
-            # Connect TTS to otto-api handler response callback
+            # Connect TTS to handlers with response callbacks
             from otto_coms.handlers.otto_api import OttoApiOutput
+            from otto_coms.handlers.cc_direct import CcDirectOutput
             for handler in outputs:
-                if isinstance(handler, OttoApiOutput):
-                    def _on_api_response(data: dict, _tts=tts_engine) -> None:
+                if isinstance(handler, (OttoApiOutput, CcDirectOutput)):
+                    def _on_response(data: dict, _tts=tts_engine) -> None:
                         response_text = data.get("response", "")
                         if response_text and _tts is not None:
                             _tts.speak(response_text)  # non-blocking, queued
 
-                    handler.set_response_callback(_on_api_response)
-                    logger.info("TTS wired to otto-api responses")
-                    break
+                    handler.set_response_callback(_on_response)
+                    handler_name = type(handler).__name__
+                    logger.info("TTS wired to %s responses", handler_name)
 
     # Compose mode setup
     compose_mode = config.compose.enabled
@@ -187,16 +188,9 @@ async def run_pipeline(config: Config) -> None:
                         state.wake_last_speech = time.monotonic()
                     continue
 
-                # VAD detects speech during TTS → barge-in
-                barge_segment = vad.process_chunk(chunk)
-                if barge_segment is not None:
-                    tts_engine.interrupt()
-                    state.tts_barge_in = True
-                    logger.info("Barge-in via speech — TTS interrupted")
-                    print("[BARGE-IN] Speech detected — TTS stopped")
-                    # Don't discard this segment — fall through to process it
-                    # by letting it get picked up on the next loop iteration
-                    # (VAD state is already advanced, next segment will come naturally)
+                # VAD barge-in disabled — TTS audio leaks through the mic and
+                # triggers false barge-ins. Only wake word can interrupt TTS.
+                # Discard audio during TTS playback to avoid processing echo.
                 continue
 
             # Clear barge-in flag once TTS is no longer playing

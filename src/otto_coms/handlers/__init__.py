@@ -32,6 +32,7 @@ def create_outputs(config: Config) -> list[OutputHandler]:
     from otto_coms.handlers.file import FileOutput
     from otto_coms.handlers.websocket import WebSocketOutput
     from otto_coms.handlers.otto_api import OttoApiOutput
+    from otto_coms.handlers.cc_direct import CcDirectOutput
 
     registry: dict[str, type[OutputHandler]] = {
         "console": ConsoleOutput,
@@ -39,6 +40,7 @@ def create_outputs(config: Config) -> list[OutputHandler]:
         "clipboard": ClipboardOutput,
         "websocket": WebSocketOutput,
         "otto-api": OttoApiOutput,
+        "cc-direct": CcDirectOutput,
     }
 
     handlers = []

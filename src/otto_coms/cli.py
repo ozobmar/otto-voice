@@ -67,7 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--outputs", nargs="+", default=None,
-        choices=["console", "file", "clipboard", "websocket", "otto-api"],
+        choices=["console", "file", "clipboard", "websocket", "otto-api", "cc-direct"],
         help="Output handlers to enable",
     )
     parser.add_argument(
@@ -101,8 +101,32 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Otto server URL (e.g. http://otto-core-01:8080)",
     )
     parser.add_argument(
+        "--cc-session", type=str, default=None,
+        help="Resume an existing Claude Code session by ID (cc-direct only)",
+    )
+    parser.add_argument(
+        "--cc-dir", type=str, default=None,
+        help="Working directory for Claude Code (cc-direct only, defaults to cwd)",
+    )
+    parser.add_argument(
+        "--tts", action="store_true", default=None,
+        help="Enable TTS (speak responses)",
+    )
+    parser.add_argument(
+        "--no-tts", action="store_true", default=None,
+        help="Disable TTS",
+    )
+    parser.add_argument(
+        "--tts-rate", type=str, default=None,
+        help="TTS speech rate (e.g. '+30%%', '-10%%', '+0%%')",
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true",
         help="Enable debug logging",
+    )
+    parser.add_argument(
+        "--quiet", "-q", action="store_true",
+        help="Suppress info messages, show warnings and errors only",
     )
     return parser
 
@@ -111,8 +135,13 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    # Logging — console at INFO (or DEBUG with -v), file always at DEBUG
-    console_level = logging.DEBUG if args.verbose else logging.INFO
+    # Logging — console at WARNING (-q), DEBUG (-v), or INFO (default)
+    if args.quiet:
+        console_level = logging.WARNING
+    elif args.verbose:
+        console_level = logging.DEBUG
+    else:
+        console_level = logging.INFO
     log_fmt = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",

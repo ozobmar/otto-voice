@@ -67,11 +67,21 @@ class OttoApiOutputConfig:
 
 
 @dataclass
+class CcDirectOutputConfig:
+    working_dir: str | None = None
+    model: str | None = None
+    system_prompt: str | None = None
+    max_budget_usd: float | None = None
+    session_id: str | None = None
+
+
+@dataclass
 class OutputSettings:
     file: FileOutputConfig = field(default_factory=FileOutputConfig)
     clipboard: ClipboardOutputConfig = field(default_factory=ClipboardOutputConfig)
     websocket: WebSocketOutputConfig = field(default_factory=WebSocketOutputConfig)
     otto_api: OttoApiOutputConfig = field(default_factory=OttoApiOutputConfig)
+    cc_direct: CcDirectOutputConfig = field(default_factory=CcDirectOutputConfig)
 
 
 @dataclass
@@ -119,7 +129,7 @@ class ListeningConfig:
 class TTSConfig:
     enabled: bool = True
     voice: str = "en-IE-EmilyNeural"  # edge-tts voice name
-    rate: str = "+0%"    # edge-tts rate adjustment (e.g. "+10%", "-20%")
+    rate: str = "+30%"    # edge-tts rate adjustment (e.g. "+10%", "-20%")
     volume: str = "+0%"  # edge-tts volume adjustment
 
 
@@ -254,4 +264,14 @@ def apply_cli_overrides(config: Config, args: Any) -> Config:
         config.listening.wake_word.threshold = args.ww_threshold
     if getattr(args, "otto_url", None) is not None:
         config.output_settings.otto_api.url = args.otto_url
+    if getattr(args, "cc_session", None) is not None:
+        config.output_settings.cc_direct.session_id = args.cc_session
+    if getattr(args, "cc_dir", None) is not None:
+        config.output_settings.cc_direct.working_dir = args.cc_dir
+    if getattr(args, "tts", None):
+        config.tts.enabled = True
+    if getattr(args, "no_tts", None):
+        config.tts.enabled = False
+    if getattr(args, "tts_rate", None) is not None:
+        config.tts.rate = args.tts_rate
     return config
