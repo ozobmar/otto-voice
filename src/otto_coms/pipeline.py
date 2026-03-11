@@ -63,14 +63,25 @@ async def run_pipeline(config: Config) -> None:
     state = PipelineState()
     state.listening_mode = config.listening.mode
 
-    # Set default audio device for all sounddevice calls (capture, TTS, beeps)
-    if config.audio.device is not None:
-        import sounddevice as sd
-        dev = _resolve_audio_device(config.audio.device)
-        if dev is not None:
-            sd.default.device = (dev, dev)
-            dev_name = sd.query_devices(dev)["name"]
-            logger.info("Audio device set to %d: %s (input + output)", dev, dev_name)
+    # Set default audio device for sounddevice calls (TTS, beeps, fallback capture).
+    # input_device overrides device for capture (handled in AudioCapture).
+    # output_device overrides device for playback (sd.default.device output side).
+    import sounddevice as sd
+    output_cfg = config.audio.output_device or config.audio.device
+    input_cfg = config.audio.input_device or config.audio.device
+    if output_cfg is not None or input_cfg is not None:
+        out_dev = _resolve_audio_device(output_cfg)
+        in_dev = _resolve_audio_device(input_cfg)
+        sd.default.device = (in_dev, out_dev)
+        if out_dev is not None:
+            out_name = sd.query_devices(out_dev)["name"]
+            logger.info("Output device set to %d: %s", out_dev, out_name)
+        if in_dev is not None:
+            in_name = sd.query_devices(in_dev)["name"]
+            logger.info("Input device set to %d: %s", in_dev, in_name)
+        elif config.audio.input_device is not None:
+            # ALSA path — couldn't resolve to index but AudioCapture will use it directly
+            logger.info("Input device (ALSA): %s", config.audio.input_device)
 
     # Initialise components
     audio_queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=500)
@@ -192,10 +203,14 @@ async def run_pipeline(config: Config) -> None:
             if state.device_status in ("disconnected", "reconnecting"):
                 state.device_status = "reconnecting"
                 try:
-                    dev = _resolve_audio_device(config.audio.device)
-                    if dev is not None:
-                        import sounddevice as sd
-                        sd.default.device = (dev, dev)
+                    # Re-resolve both devices on reconnect
+                    out_cfg = config.audio.output_device or config.audio.device
+                    in_cfg = config.audio.input_device or config.audio.device
+                    out_dev = _resolve_audio_device(out_cfg)
+                    in_dev = _resolve_audio_device(in_cfg)
+                    # Need at least a resolvable output or an ALSA input path
+                    if out_dev is not None or in_dev is not None or config.audio.input_device is not None:
+                        sd.default.device = (in_dev, out_dev)
                         await capture.start()
                         state.device_status = "connected"
                         state.last_chunk_time = time.monotonic()

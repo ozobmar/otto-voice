@@ -2,7 +2,9 @@
 # CLI args override these values
 
 audio:
-  device: null          # null = system default mic
+  device: null          # null = system default; device name or index for both input + output
+  input_device: null    # null = use 'device'; mic override (supports ALSA paths e.g. "hw:1,0")
+  output_device: null   # null = use 'device'; speaker override
   sample_rate: 16000
   block_size: 512       # 32ms at 16kHz, matches Silero VAD window
   gain: 1.0

@@ -40,8 +40,10 @@ class AudioCapture:
     async def start(self) -> None:
         """Open the audio stream."""
         self._loop = asyncio.get_running_loop()
+        # Prefer input_device (supports ALSA paths like "hw:1,0") over generic device
+        capture_device = self.config.input_device if self.config.input_device is not None else self.config.device
         self._stream = sd.InputStream(
-            device=self.config.device,
+            device=capture_device,
             samplerate=self.config.sample_rate,
             channels=1,
             dtype="float32",
@@ -50,8 +52,11 @@ class AudioCapture:
             callback=self._callback,
         )
         self._stream.start()
-        device_info = sd.query_devices(self.config.device or sd.default.device[0])
-        logger.info("Listening on: %s", device_info["name"])
+        try:
+            device_info = sd.query_devices(capture_device or sd.default.device[0])
+            logger.info("Listening on: %s", device_info["name"])
+        except Exception:
+            logger.info("Listening on: %s", capture_device)
 
     async def stop(self) -> None:
         """Close the audio stream."""

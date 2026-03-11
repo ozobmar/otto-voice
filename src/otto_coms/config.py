@@ -14,6 +14,8 @@ _DEFAULT_CONFIG = Path(__file__).resolve().parent.parent.parent / "config.defaul
 @dataclass
 class AudioConfig:
     device: int | str | None = None
+    input_device: int | str | None = None   # mic — overrides device for capture (supports ALSA paths e.g. "hw:1,0")
+    output_device: int | str | None = None  # speaker — overrides device for playback
     sample_rate: int = 16000
     block_size: int = 512
     gain: float = 1.0
