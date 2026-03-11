@@ -221,12 +221,21 @@ def _dict_to_config(data: dict[str, Any]) -> Config:
 
 
 def load_config(config_path: Path | None = None) -> Config:
-    """Load config from YAML file, falling back to defaults."""
+    """Load config from YAML file, falling back to defaults.
+
+    Loads config.default.yaml first, then merges config.yaml from the same
+    directory (if it exists) as local overrides. An explicit config_path
+    takes precedence over the auto-discovered config.yaml.
+    """
     base: dict[str, Any] = {}
 
     if _DEFAULT_CONFIG.exists():
         with open(_DEFAULT_CONFIG) as f:
             base = yaml.safe_load(f) or {}
+
+    # Auto-discover config.yaml alongside config.default.yaml
+    if config_path is None:
+        config_path = _DEFAULT_CONFIG.parent / "config.yaml"
 
     if config_path and config_path.exists():
         with open(config_path) as f:
