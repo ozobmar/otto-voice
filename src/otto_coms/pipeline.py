@@ -84,7 +84,7 @@ async def run_pipeline(config: Config) -> None:
             logger.info("Input device (ALSA): %s", config.audio.input_device)
 
     # Initialise components
-    audio_queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=500)
+    audio_queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=2000)
     capture = AudioCapture(config.audio, audio_queue)
     vad = VADProcessor(config.vad, sample_rate=config.audio.sample_rate)
     stt = STTEngine(config.stt)
