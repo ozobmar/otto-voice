@@ -80,8 +80,8 @@ class WakeWordDetector:
 
         for model_name, score in prediction.items():
             if score > 0.01:
-                logger.debug("Wake word score: %s=%.3f (threshold=%.2f)",
-                             model_name, score, self.config.threshold)
+                logger.info("Wake word score: %s=%.3f (threshold=%.2f)",
+                            model_name, score, self.config.threshold)
             if score >= self.config.threshold:
                 logger.info("Wake word detected: %s (score=%.3f)", model_name, score)
                 self._model.reset()
