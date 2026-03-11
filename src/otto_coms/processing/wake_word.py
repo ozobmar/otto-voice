@@ -26,13 +26,23 @@ class WakeWordDetector:
             import inspect
 
             model_path = self.config.model
+
             # Resolve relative paths from the package root
+            from pathlib import Path
             if not model_path.startswith("/") and "/" in model_path:
-                from pathlib import Path
                 pkg_root = Path(__file__).resolve().parent.parent.parent.parent
                 resolved = pkg_root / model_path
                 if resolved.exists():
                     model_path = str(resolved)
+
+            # For bare model names (e.g. "hey_jarvis"), resolve to bundled ONNX file
+            if "/" not in model_path and not Path(model_path).exists():
+                import openwakeword
+                oww_dir = Path(openwakeword.__file__).parent / "resources" / "models"
+                # Try exact match, then with version suffix
+                for candidate in sorted(oww_dir.glob(f"{model_path}*.onnx")):
+                    model_path = str(candidate)
+                    break
 
             # openwakeword API changed between versions:
             # 0.4.x: wakeword_model_paths (list of paths)
