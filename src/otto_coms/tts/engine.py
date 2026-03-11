@@ -211,19 +211,20 @@ class TTSEngine:
         # Play through speakers — non-blocking so we can check for interrupts
         try:
             samplerate = decoded.sample_rate
-            try:
-                sd.play(audio_float, samplerate=samplerate, blocking=False)
-            except sd.PortAudioError:
-                # Resample to the output device's native rate
-                device_info = sd.query_devices(sd.default.device[1], kind="output")
+            out_device = sd.default.device[1] if sd.default.device[1] is not None else None
+
+            # Resample to the output device's native rate if different
+            if out_device is not None:
+                device_info = sd.query_devices(out_device, kind="output")
                 native_rate = int(device_info["default_samplerate"])
-                logger.warning("Playback failed at %d Hz, resampling to %d Hz", samplerate, native_rate)
-                ratio = native_rate / samplerate
-                n_out = int(len(audio_float) * ratio)
-                indices = np.arange(n_out) / ratio
-                audio_float = np.interp(indices, np.arange(len(audio_float)), audio_float).astype(np.float32)
-                samplerate = native_rate
-                sd.play(audio_float, samplerate=samplerate, blocking=False)
+                if native_rate != samplerate:
+                    ratio = native_rate / samplerate
+                    n_out = int(len(audio_float) * ratio)
+                    indices = np.arange(n_out) / ratio
+                    audio_float = np.interp(indices, np.arange(len(audio_float)), audio_float).astype(np.float32)
+                    samplerate = native_rate
+
+            sd.play(audio_float, samplerate=samplerate, device=out_device, blocking=False)
 
             # Wait for playback to finish, checking for barge-in every 50ms
             duration_s = len(audio_float) / samplerate
