@@ -23,10 +23,31 @@ class WakeWordDetector:
         """Load the wake word model. Returns True if successful."""
         try:
             from openwakeword.model import Model
-            self._model = Model(
-                wakeword_models=[self.config.model],
-                inference_framework="onnx",
-            )
+            import inspect
+
+            model_path = self.config.model
+            # Resolve relative paths from the package root
+            if not model_path.startswith("/") and "/" in model_path:
+                from pathlib import Path
+                pkg_root = Path(__file__).resolve().parent.parent.parent.parent
+                resolved = pkg_root / model_path
+                if resolved.exists():
+                    model_path = str(resolved)
+
+            # openwakeword API changed between versions:
+            # 0.4.x: wakeword_model_paths (list of paths)
+            # 0.6.x: wakeword_models (list of names/paths) + inference_framework
+            init_params = inspect.signature(Model.__init__).parameters
+            if "wakeword_models" in init_params:
+                self._model = Model(
+                    wakeword_models=[model_path],
+                    inference_framework="onnx",
+                )
+            else:
+                self._model = Model(
+                    wakeword_model_paths=[model_path],
+                )
+
             self._available = True
             logger.info("Wake word model loaded: %s (threshold=%.2f)",
                         self.config.model, self.config.threshold)
