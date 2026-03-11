@@ -44,6 +44,12 @@ async def run_pipeline(config: Config) -> None:
     state = PipelineState()
     state.listening_mode = config.listening.mode
 
+    # Set default audio device for all sounddevice calls (capture, TTS, beeps)
+    if config.audio.device is not None:
+        import sounddevice as sd
+        sd.default.device = (config.audio.device, config.audio.device)
+        logger.info("Audio device set to %s (input + output)", config.audio.device)
+
     # Initialise components
     audio_queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=500)
     capture = AudioCapture(config.audio, audio_queue)
