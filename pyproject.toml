@@ -31,12 +31,16 @@ wake-word = [
 ui = [
     "textual>=0.47",
 ]
+speak-api = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
 ]
 all = [
-    "otto-coms[gpu,wake-word,ui,dev]",
+    "otto-coms[gpu,wake-word,ui,speak-api,dev]",
 ]
 
 [project.scripts]

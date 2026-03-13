@@ -240,6 +240,17 @@ class TTSEngine:
         except Exception as e:
             logger.error("TTS playback error: %s", e)
 
+    def wait(self, timeout: float = 60.0) -> None:
+        """Block until TTS has finished playing (for use in executor threads)."""
+        # Wait until the queue is empty and playback has stopped
+        deadline = threading.Event()
+        import time
+        start = time.monotonic()
+        while (not self._queue.empty() or self._playing.is_set()):
+            if time.monotonic() - start > timeout:
+                break
+            time.sleep(0.05)
+
     def stop(self) -> None:
         """Stop the worker thread."""
         if self._thread is not None and self._thread.is_alive():

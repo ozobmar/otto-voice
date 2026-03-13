@@ -137,6 +137,12 @@ class TTSConfig:
 
 
 @dataclass
+class SpeakApiConfig:
+    host: str = "0.0.0.0"
+    port: int = 8766
+
+
+@dataclass
 class TransmissionConfig:
     mode: str = "sync"  # "sync" or "async"
     async_callback_host: str = "0.0.0.0"
@@ -155,6 +161,8 @@ class Config:
     listening: ListeningConfig = field(default_factory=ListeningConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
     transmission: TransmissionConfig = field(default_factory=TransmissionConfig)
+    speak_api: SpeakApiConfig = field(default_factory=SpeakApiConfig)
+    mode: str = "pipeline"  # "pipeline" or "speak-api"
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -209,6 +217,8 @@ def _dict_to_config(data: dict[str, Any]) -> Config:
         async_callback_port=tx_data.get("async_callback_port", 8766),
     )
 
+    speak_api = SpeakApiConfig(**data.get("speak_api", {}))
+
     return Config(
         audio=audio,
         vad=vad,
@@ -220,6 +230,7 @@ def _dict_to_config(data: dict[str, Any]) -> Config:
         listening=listening,
         tts=tts,
         transmission=transmission,
+        speak_api=speak_api,
     )
 
 
@@ -286,4 +297,10 @@ def apply_cli_overrides(config: Config, args: Any) -> Config:
         config.tts.enabled = False
     if getattr(args, "tts_rate", None) is not None:
         config.tts.rate = args.tts_rate
+    if getattr(args, "mode", None) is not None:
+        config.mode = args.mode
+    if getattr(args, "api_host", None) is not None:
+        config.speak_api.host = args.api_host
+    if getattr(args, "api_port", None) is not None:
+        config.speak_api.port = args.api_port
     return config

@@ -128,6 +128,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--quiet", "-q", action="store_true",
         help="Suppress info messages, show warnings and errors only",
     )
+    parser.add_argument(
+        "--mode", type=str, default=None,
+        choices=["pipeline", "speak-api"],
+        help="Run mode: pipeline (default) or speak-api (reverse voice interface)",
+    )
+    parser.add_argument(
+        "--api-host", type=str, default=None,
+        help="Speak API bind host (speak-api mode, default 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--api-port", type=int, default=None,
+        help="Speak API port (speak-api mode, default 8766)",
+    )
     return parser
 
 
@@ -197,10 +210,16 @@ def main() -> None:
             config.stt.model, config.stt.device, config.stt.compute_type,
         )
 
-    # Run pipeline
-    from otto_coms.pipeline import run_pipeline
-
-    try:
-        asyncio.run(run_pipeline(config))
-    except KeyboardInterrupt:
-        pass  # Pipeline prints "Stopping..." in its finally block
+    # Run selected mode
+    if config.mode == "speak-api":
+        from otto_coms.speak_api import run_speak_api
+        try:
+            asyncio.run(run_speak_api(config, host=config.speak_api.host, port=config.speak_api.port))
+        except KeyboardInterrupt:
+            pass
+    else:
+        from otto_coms.pipeline import run_pipeline
+        try:
+            asyncio.run(run_pipeline(config))
+        except KeyboardInterrupt:
+            pass  # Pipeline prints "Stopping..." in its finally block
