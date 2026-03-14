@@ -73,6 +73,12 @@ async def run_pipeline(config: Config) -> None:
         out_dev = _resolve_audio_device(output_cfg)
         in_dev = _resolve_audio_device(input_cfg)
         sd.default.device = (in_dev, out_dev)
+        # Write resolved indices back so AudioCapture uses integer index, not name string
+        if in_dev is not None:
+            config.audio.input_device = in_dev
+            config.audio.device = in_dev
+        if out_dev is not None:
+            config.audio.output_device = out_dev
         if out_dev is not None:
             out_name = sd.query_devices(out_dev)["name"]
             logger.info("Output device set to %d: %s", out_dev, out_name)

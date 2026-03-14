@@ -140,6 +140,10 @@ class TTSConfig:
 class SpeakApiConfig:
     host: str = "0.0.0.0"
     port: int = 8766
+    voice: str | None = None               # TTS voice override (None = use tts.voice)
+    vad_silence_duration_ms: int = 2000    # silence within a speech segment
+    end_of_response_silence_s: float = 4.0 # silence after last segment before resolving
+    default_timeout: float = 120.0         # default speak request timeout (seconds)
 
 
 @dataclass

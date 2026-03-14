@@ -79,3 +79,12 @@ transmission:
   mode: sync            # sync or async
   async_callback_host: "0.0.0.0"
   async_callback_port: 8766
+
+
+speak_api:
+  host: "0.0.0.0"
+  port: 8766
+  voice: null                    # TTS voice override, e.g. en-US-AriaNeural (null = use tts.voice)
+  vad_silence_duration_ms: 2000  # silence within a speech segment before emitting
+  end_of_response_silence_s: 8.0 # silence after last segment before resolving full response
+  default_timeout: 120.0         # seconds to wait for spoken response

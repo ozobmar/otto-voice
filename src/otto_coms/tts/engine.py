@@ -53,6 +53,7 @@ class TTSEngine:
         self._thread: threading.Thread | None = None
         self._playing = threading.Event()  # set while audio is playing
         self._interrupted = threading.Event()  # set to signal barge-in
+        self._pending: int = 0  # items queued but not yet finished
 
     def load(self) -> bool:
         """Verify edge-tts is importable and start the worker thread."""
@@ -85,6 +86,7 @@ class TTSEngine:
         """Queue text for speech. Non-blocking — returns immediately."""
         if not self._available:
             return
+        self._pending += 1
         self._queue.put(text)
 
     def interrupt(self) -> None:
@@ -128,6 +130,7 @@ class TTSEngine:
                 except Exception as e:
                     logger.error("TTS speak error: %s", e, exc_info=True)
                 finally:
+                    self._pending = max(0, self._pending - 1)
                     self._playing.clear()
                     self._interrupted.clear()
         finally:
@@ -242,11 +245,9 @@ class TTSEngine:
 
     def wait(self, timeout: float = 60.0) -> None:
         """Block until TTS has finished playing (for use in executor threads)."""
-        # Wait until the queue is empty and playback has stopped
-        deadline = threading.Event()
         import time
         start = time.monotonic()
-        while (not self._queue.empty() or self._playing.is_set()):
+        while self._pending > 0 or self._playing.is_set():
             if time.monotonic() - start > timeout:
                 break
             time.sleep(0.05)

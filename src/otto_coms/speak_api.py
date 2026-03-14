@@ -27,7 +27,6 @@ from pydantic import BaseModel
 
 from otto_coms.audio.capture import AudioCapture
 from otto_coms.config import Config
-from otto_coms.platform.audio_feedback import beep_start, beep_done
 from otto_coms.processing.stt import STTEngine
 from otto_coms.processing.vad import VADProcessor
 from otto_coms.tts.engine import TTSEngine
@@ -41,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 class SpeakRequest(BaseModel):
     text: str
-    timeout: float = 30.0
+    timeout: float = 120.0
 
 
 class SpeakResponse(BaseModel):
@@ -60,8 +59,14 @@ class SpeakApiState:
         self.lock: asyncio.Lock = asyncio.Lock()
         self.response_future: Optional[asyncio.Future[str]] = None
         self.listening: bool = False
+        self.tts_speaking: bool = False  # True while TTS is playing + settle window
         self.tts_engine: Optional[TTSEngine] = None
+        self.audio_queue: Optional[asyncio.Queue] = None  # set by run_speak_api
         self.ready: asyncio.Event = asyncio.Event()  # set once pipeline is ready
+        # Segment accumulation — collects VAD segments until end-of-response silence
+        self.segments: list[np.ndarray] = []
+        self.last_segment_time: float = 0.0
+        self.end_of_response_silence_s: float = 4.0  # set from config at startup
 
 
 _state: SpeakApiState = SpeakApiState()
@@ -90,18 +95,31 @@ async def speak(req: SpeakRequest) -> SpeakResponse:
     async with _state.lock:
         loop = asyncio.get_running_loop()
 
-        # Open the future and start listening BEFORE TTS — this allows the
-        # audio loop to capture TTS playback (self-test via Stereo Mix) or
-        # any speech that overlaps with the tail of TTS playback.
+        # Reset segment accumulator and open future before TTS starts
+        _state.segments = []
+        _state.last_segment_time = 0.0
         _state.response_future = loop.create_future()
         _state.listening = True
 
-        # Speak the text
+        # Speak the text — gate the mic during playback + settle window
         if _state.tts_engine is not None:
             logger.info("[speak-api] Speaking: %s", req.text)
+            _state.tts_speaking = True
             _state.tts_engine.speak(req.text)
-            # Wait for TTS to finish (mic is already open)
             await loop.run_in_executor(None, _state.tts_engine.wait)
+            await asyncio.sleep(0.3)  # let reverb settle
+            # Drain any audio captured during TTS playback before opening mic
+            if _state.audio_queue is not None:
+                drained = 0
+                while not _state.audio_queue.empty():
+                    try:
+                        _state.audio_queue.get_nowait()
+                        drained += 1
+                    except asyncio.QueueEmpty:
+                        break
+                if drained:
+                    logger.debug("[speak-api] Drained %d audio chunks after TTS", drained)
+            _state.tts_speaking = False
             logger.info("[speak-api] TTS done, listening for response...")
 
         try:
@@ -175,9 +193,9 @@ async def _audio_loop(
 
             last_chunk = time.monotonic()
 
-            # Skip audio while TTS is playing — unless actively listening
-            # (when listening, we want to capture TTS playback for self-test)
-            if not _state.listening and _state.tts_engine is not None and _state.tts_engine.is_playing:
+            # Gate mic during TTS playback + settle window to prevent echo
+            if _state.tts_speaking:
+                vad.reset()
                 continue
 
             # Only process VAD/STT when a speak request is waiting
@@ -186,24 +204,38 @@ async def _audio_loop(
                 continue
 
             segment = vad.process_chunk(chunk)
-            if segment is None:
-                continue
 
-            # Transcribe
-            loop.run_in_executor(None, beep_start)
-            text = await loop.run_in_executor(
-                None, stt.transcribe, segment, config.audio.sample_rate,
-            )
-            loop.run_in_executor(None, beep_done)
+            # Track any speech activity to prevent premature end-of-response
+            if vad.state.value != "silence":
+                _state.last_segment_time = time.monotonic()
 
-            if not text:
-                continue
+            if segment is not None:
+                # Accumulate segment — don't transcribe yet
+                _state.segments.append(segment)
+                _state.last_segment_time = time.monotonic()
+                logger.debug("[speak-api] Segment accumulated (total: %d)", len(_state.segments))
 
-            # Resolve the pending future
-            if (_state.listening
-                    and _state.response_future is not None
-                    and not _state.response_future.done()):
-                _state.response_future.set_result(text)
+            # Only fire end-of-response when VAD is idle AND silence window has elapsed
+            if (
+                _state.segments
+                and _state.last_segment_time > 0
+                and vad.state.value == "silence"
+                and time.monotonic() - _state.last_segment_time >= _state.end_of_response_silence_s
+                and _state.response_future is not None
+                and not _state.response_future.done()
+            ):
+                # Concatenate all segments and transcribe once
+                combined = np.concatenate(_state.segments)
+                _state.segments = []
+                logger.info(
+                    "[speak-api] End-of-response detected — transcribing %.1fs of audio",
+                    len(combined) / config.audio.sample_rate,
+                )
+                text = await loop.run_in_executor(
+                    None, stt.transcribe, combined, config.audio.sample_rate,
+                )
+                if text and _state.listening and not _state.response_future.done():
+                    _state.response_future.set_result(text)
 
     finally:
         try:
@@ -218,10 +250,21 @@ async def run_speak_api(config: Config, host: str = "0.0.0.0", port: int = 8766)
     # Force no output handlers
     config.outputs = []
 
+    # Apply speak-api overrides
+    if config.speak_api.voice:
+        config.tts.voice = config.speak_api.voice
+    config.vad.silence_duration_ms = config.speak_api.vad_silence_duration_ms
+
     # Require TTS
     if not config.tts.enabled:
         logger.warning("[speak-api] TTS is disabled — enabling it now")
         config.tts.enabled = True
+
+    logger.info(
+        "[speak-api] Config: voice=%s, vad_silence=%dms, eor_silence=%.1fs, default_timeout=%.0fs",
+        config.tts.voice, config.vad.silence_duration_ms,
+        config.speak_api.end_of_response_silence_s, config.speak_api.default_timeout,
+    )
 
     # Initialise components
     loop = asyncio.get_running_loop()
@@ -240,6 +283,8 @@ async def run_speak_api(config: Config, host: str = "0.0.0.0", port: int = 8766)
         raise RuntimeError("TTS engine failed to load")
 
     _state.tts_engine = tts
+    _state.audio_queue = audio_queue
+    _state.end_of_response_silence_s = config.speak_api.end_of_response_silence_s
 
     # Start audio pipeline loop
     pipeline_task = asyncio.create_task(

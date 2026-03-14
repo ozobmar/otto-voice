@@ -42,10 +42,15 @@ class AudioCapture:
         self._loop = asyncio.get_running_loop()
         # Prefer input_device (supports ALSA paths like "hw:1,0") over generic device
         capture_device = self.config.input_device if self.config.input_device is not None else self.config.device
+        try:
+            dev_info = sd.query_devices(capture_device or sd.default.device[0], kind="input")
+            channels = max(1, int(dev_info["max_input_channels"]))
+        except Exception:
+            channels = 1
         self._stream = sd.InputStream(
             device=capture_device,
             samplerate=self.config.sample_rate,
-            channels=1,
+            channels=channels,
             dtype="float32",
             blocksize=self.config.block_size,
             latency="high",
