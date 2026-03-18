@@ -13,6 +13,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _print_buffer(message: str) -> None:
+    """Clear any in-place countdown line then print a buffer status message."""
+    print("\r" + " " * 40 + "\r", end="", flush=True)
+    print(message)
+
+
 class ComposeBuffer:
     """Buffers utterances with undo/redo pointer and flushes as a single prompt."""
 
@@ -66,23 +72,24 @@ class ComposeBuffer:
         self._cancel_auto_send()
         self._utterances.clear()
         self._pointer = 0
-        print("[BUFFER] Cleared")
+        _print_buffer("[BUFFER] Cleared")
         logger.info("Buffer cleared")
 
     def get_text(self) -> str:
-        return " ".join(self._utterances[:self._pointer])
+        stripped = [u.rstrip(".!?,… ") for u in self._utterances[:self._pointer]]
+        return " ".join(stripped)
 
     def is_empty(self) -> bool:
         return self._pointer == 0
 
     def display(self) -> None:
         if self.is_empty():
-            print("[BUFFER] (empty)")
+            _print_buffer("[BUFFER] (empty)")
             return
         combined = self.get_text()
         redo_count = len(self._utterances) - self._pointer
         suffix = f" [+{redo_count} undone]" if redo_count > 0 else ""
-        print(f"[BUFFER] {combined}{suffix}")
+        _print_buffer(f"[BUFFER] {combined}{suffix}")
 
     async def preview(self) -> None:
         if self.is_empty():
@@ -112,7 +119,7 @@ class ComposeBuffer:
         self._cancel_auto_send()
 
         if self.is_empty():
-            print("[BUFFER] Nothing to send")
+            _print_buffer("[BUFFER] Nothing to send")
             return
 
         text = self.get_text()
@@ -138,13 +145,13 @@ class ComposeBuffer:
         self._last_sent = text
         self._utterances.clear()
         self._pointer = 0
-        print("[BUFFER] Sent and cleared")
+        _print_buffer("[BUFFER] Sent and cleared")
         if self._on_sent is not None:
             self._on_sent()
 
     async def resend(self) -> None:
         if self._last_sent is None:
-            print("[BUFFER] Nothing to resend")
+            _print_buffer("[BUFFER] Nothing to resend")
             return
 
         text = self._last_sent
@@ -157,7 +164,7 @@ class ComposeBuffer:
             except Exception as e:
                 logger.error("Output error (%s): %s", type(handler).__name__, e)
 
-        print("[BUFFER] Resent")
+        _print_buffer("[BUFFER] Resent")
         if self._on_sent is not None:
             self._on_sent()
 
@@ -173,12 +180,17 @@ class ComposeBuffer:
 
     async def _auto_send(self) -> None:
         try:
-            await asyncio.sleep(self._auto_send_delay)
+            remaining = int(self._auto_send_delay)
+            while remaining > 0:
+                print(f"\r[AUTO-SEND] Sending in {remaining}  ", end="", flush=True)
+                await asyncio.sleep(1)
+                remaining -= 1
+            print(f"\r[AUTO-SEND] Sending           ", end="", flush=True)
         except asyncio.CancelledError:
+            print("\r" + " " * 40 + "\r", end="", flush=True)
             return
 
         logger.info("Auto-send: buffer flush after %.1fs silence", self._auto_send_delay)
-        print(f"[AUTO-SEND] Buffer flush after {self._auto_send_delay:.0f}s silence...")
 
         # Clear own task reference before calling flush(),
         # otherwise flush() -> _cancel_auto_send() cancels us mid-flight.

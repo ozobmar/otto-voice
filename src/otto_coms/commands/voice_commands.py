@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from otto_coms.platform.input_sim import press_enter
@@ -71,7 +72,7 @@ def check_voice_command(
 
     Returns CommandResult indicating whether the command was handled.
     """
-    normalised = text.strip().lower().rstrip(".")
+    normalised = re.sub(r'[.?!]+$', '', text.strip().lower()).strip()
 
     # Mode switching (always checked first)
     mode_action = _MODE_COMMANDS.get(normalised)
@@ -138,5 +139,15 @@ def _check_compose_command(
     if normalised.endswith("cancel"):
         logger.info("Compose command: cancel -> discarding utterance")
         return CommandResult(handled=True)
+
+    # Trailing send: "some text send" -> add remainder to buffer then flush
+    for cmd in _COMPOSE_SEND:
+        if normalised.endswith(" " + cmd):
+            remainder = normalised[: -(len(cmd) + 1)].strip()
+            if remainder:
+                buffer.add(remainder)
+            logger.info("Compose command: trailing '%s' -> flush buffer (remainder: '%s')", cmd, remainder)
+            asyncio.create_task(buffer.flush())
+            return CommandResult(handled=True)
 
     return CommandResult(handled=False, text=text)

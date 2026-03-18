@@ -198,10 +198,11 @@ async def run_pipeline(config: Config) -> None:
     # Start audio capture
     await capture.start()
     state.last_chunk_time = time.monotonic()
-    logger.info("Pipeline running (%s mode). Ctrl+C to stop.", state.listening_mode)
-    logger.info("Shift+L to pause/resume listening")
+    logger.info("Pipeline running (%s mode).", state.listening_mode)
 
     print_commands(compose_mode)
+    print_system("Ctrl+C to stop.")
+    print_system("Ready.")
 
     try:
         while True:
@@ -366,7 +367,7 @@ async def run_pipeline(config: Config) -> None:
                 loop.run_in_executor(None, beep_sent)
 
     finally:
-        print("\nStopping...")
+        print_system("Stopping...")
         if buffer is not None:
             buffer._cancel_auto_send()
         hotkeys.stop()
@@ -382,6 +383,11 @@ async def run_pipeline(config: Config) -> None:
             except (asyncio.TimeoutError, Exception) as e:
                 logger.error("Output stop error: %s", e)
         logger.info("Pipeline stopped.")
+
+
+def print_system(message: str) -> None:
+    """Print a system-level message with [SYSTEM] tag."""
+    print(f"[SYSTEM] {message}")
 
 
 def print_commands(compose_mode: bool = False) -> None:

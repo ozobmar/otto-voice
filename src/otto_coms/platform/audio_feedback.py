@@ -54,12 +54,12 @@ def _play_tone(frequency: float, duration_ms: int) -> None:
 
 def beep_start() -> None:
     """Low blip — transcription starting."""
-    _play_tone(500, 50)
+    _play_tone(500, 40)
 
 
 def beep_done() -> None:
     """Mid beep — transcription complete."""
-    _play_tone(800, 80)
+    _play_tone(800, 40)
 
 
 def beep_sent() -> None:
